@@ -5,15 +5,18 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install build dependencies
-RUN apk add --no-cache python3 make g++
+# Install build dependencies including openssl for Prisma
+RUN apk add --no-cache python3 make g++ openssl
+
+# Force development environment in builder stage so npm installs typescript/tsc
+ENV NODE_ENV=development
 
 # Copy package manifests
 COPY package*.json ./
 COPY tsconfig.json ./
 
-# Install all dependencies
-RUN npm ci
+# Install all dependencies including devDependencies (typescript)
+RUN npm ci --include=dev
 
 # Copy Prisma schema & generate client
 COPY prisma ./prisma
@@ -35,8 +38,8 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV AUTH_DIR=/data/baileys-auth
 
-# Install dumb-init for proper signal handling (SIGTERM, SIGINT)
-RUN apk add --no-cache dumb-init
+# Install dumb-init for proper signal handling (SIGTERM, SIGINT) and openssl for Prisma
+RUN apk add --no-cache dumb-init openssl
 
 # Create non-root system group and user
 RUN addgroup -S -g 1001 nodejs && \
