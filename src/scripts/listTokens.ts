@@ -11,7 +11,7 @@ async function main() {
       return;
     }
 
-    console.table(tokens.map((t) => ({
+    console.table(tokens.map((t: any) => ({
       ID: t.id,
       Name: t.name,
       Prefix: t.tokenPrefix,
