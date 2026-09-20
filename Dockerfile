@@ -74,9 +74,9 @@ USER nodejs
 # Expose HTTP port
 EXPOSE 3000
 
-# Docker Healthcheck
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:' + (process.env.PORT || 3000) + '/health', (res) => process.exit(res.statusCode === 200 ? 0 : 1))"
+# Docker Healthcheck using native Alpine wget
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:${PORT:-3000}/health > /dev/null || exit 1
 
 # Use dumb-init to properly forward signals to node process
 ENTRYPOINT ["dumb-init", "--", "./docker-entrypoint.sh"]
