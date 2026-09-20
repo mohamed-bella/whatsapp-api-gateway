@@ -15,9 +15,8 @@ router.get('/health', async (_req: Request, res: Response) => {
   const isWhatsappHealthy = whatsappStatus.connected;
 
   const status = isDbHealthy ? 'ok' : 'degraded';
-  const statusCode = isDbHealthy ? 200 : 503;
 
-  res.status(statusCode).json({
+  res.status(200).json({
     status,
     database: isDbHealthy ? 'connected' : 'disconnected',
     whatsapp: isWhatsappHealthy ? 'connected' : whatsappStatus.status,
