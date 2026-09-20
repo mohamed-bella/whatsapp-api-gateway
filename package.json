@@ -13,6 +13,8 @@
     "prisma:studio": "prisma studio",
     "token:create": "ts-node src/scripts/createToken.ts",
     "token:list": "ts-node src/scripts/listTokens.ts",
+    "session:export": "ts-node src/scripts/exportSession.ts",
+    "session:import": "ts-node src/scripts/importSession.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -29,12 +31,14 @@
   "dependencies": {
     "@prisma/client": "^5.22.0",
     "@whiskeysockets/baileys": "^6.7.12",
+    "adm-zip": "^0.6.1",
     "axios": "^1.7.9",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.0.0",
+    "multer": "^2.4.0",
     "pino": "^9.6.0",
     "pino-http": "^10.4.0",
     "qrcode": "^1.5.4",
@@ -42,8 +46,10 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@types/adm-zip": "^0.5.8",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
+    "@types/multer": "^2.2.0",
     "@types/node": "^22.13.4",
     "@types/qrcode": "^1.5.5",
     "@types/supertest": "^6.0.2",

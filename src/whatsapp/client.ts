@@ -9,6 +9,7 @@ import { Boom } from '@hapi/boom';
 import fs from 'fs';
 import path from 'path';
 import QRCode from 'qrcode';
+import AdmZip from 'adm-zip';
 import { env } from '../config/env';
 import { logger } from '../config/logger';
 import { toWhatsAppJid, fromWhatsAppJid } from './phone';
@@ -148,10 +149,11 @@ export class WhatsAppClient {
           const boomError = lastDisconnect?.error as Boom | undefined;
           const statusCode = boomError?.output?.statusCode;
           const isLoggedOut = statusCode === DisconnectReason.loggedOut;
+          const isRestartRequired = statusCode === DisconnectReason.restartRequired;
 
           this.disconnectReason = boomError?.message || `Disconnect statusCode: ${statusCode}`;
           logger.warn(
-            { statusCode, isLoggedOut, reason: this.disconnectReason },
+            { statusCode, isLoggedOut, isRestartRequired, reason: this.disconnectReason },
             'WhatsApp connection closed'
           );
 
@@ -162,11 +164,15 @@ export class WhatsAppClient {
           } else {
             this.setStatus('close');
             if (!this.isShuttingDown) {
-              this.scheduleReconnect();
+              // If WhatsApp requests restart, reconnect immediately; otherwise use exponential backoff
+              this.scheduleReconnect(isRestartRequired);
             }
           }
         }
       });
+
+      // Start 24/7 background heartbeat monitor
+      this.startHeartbeat();
 
       // Listen for incoming messages
       this.sock.ev.on('messages.upsert', async (upsert) => {
@@ -203,20 +209,20 @@ export class WhatsAppClient {
   }
 
   /**
-   * Exponential backoff reconnect logic.
+   * Exponential backoff reconnect logic with optional immediate reconnect.
    */
-  private scheduleReconnect(): void {
+  private scheduleReconnect(immediate = false): void {
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
     }
 
     this.reconnectAttempts++;
-    // Exponential backoff: min 2s, max 60s
-    const delay = Math.min(2000 * Math.pow(1.5, this.reconnectAttempts - 1), 60000);
+    // If immediate (e.g. restartRequired), wait only 500ms; otherwise exponential backoff: min 2s, max 60s
+    const delay = immediate ? 500 : Math.min(2000 * Math.pow(1.5, this.reconnectAttempts - 1), 60000);
 
     logger.info(
-      { attempt: this.reconnectAttempts, delayMs: Math.round(delay) },
+      { attempt: this.reconnectAttempts, delayMs: Math.round(delay), immediate },
       'Scheduling WhatsApp reconnect...'
     );
 
@@ -225,6 +231,30 @@ export class WhatsAppClient {
       this.cleanupSocket();
       await this.init();
     }, delay);
+  }
+
+  private heartbeatInterval: NodeJS.Timeout | null = null;
+
+  /**
+   * Periodically checks the WebSocket connection health (every 30s)
+   * to automatically heal any silent connection drops or zombie sockets.
+   */
+  private startHeartbeat(): void {
+    if (this.heartbeatInterval) return;
+    this.heartbeatInterval = setInterval(() => {
+      if (this.isShuttingDown) return;
+      if (this.status === 'open' && this.sock) {
+        try {
+          const ws = (this.sock as any).ws;
+          if (ws && ws.readyState !== 1) { // 1 = OPEN
+            logger.warn({ readyState: ws?.readyState }, 'Heartbeat detected dead socket. Triggering reconnect...');
+            this.scheduleReconnect(true);
+          }
+        } catch {
+          // ignore heartbeat check error
+        }
+      }
+    }, 30000);
   }
 
   private cleanupSocket(): void {
@@ -420,6 +450,46 @@ export class WhatsAppClient {
       messageId,
       to: options.to
     };
+  }
+
+  /**
+   * Exports the entire auth directory as a ZIP buffer for backup/migration.
+   */
+  public exportSessionZip(): Buffer {
+    if (!fs.existsSync(this.authDir)) {
+      throw new Error('No authentication directory found to export');
+    }
+    const zip = new AdmZip();
+    zip.addLocalFolder(this.authDir);
+    return zip.toBuffer();
+  }
+
+  /**
+   * Imports and restores an authentication session from a ZIP buffer.
+   */
+  public async importSessionZip(zipBuffer: Buffer): Promise<void> {
+    logger.info('Importing WhatsApp authentication session from backup...');
+    this.cleanupSocket();
+
+    // Clear existing auth files
+    if (fs.existsSync(this.authDir)) {
+      fs.rmSync(this.authDir, { recursive: true, force: true });
+    }
+    this.ensureAuthDir();
+
+    // Extract zip contents into authDir
+    const zip = new AdmZip(zipBuffer);
+    zip.extractAllTo(this.authDir, true);
+
+    logger.info({ authDir: this.authDir }, 'Session archive extracted successfully');
+
+    // Re-initialize socket with imported credentials
+    this.reconnectAttempts = 0;
+    this.phone = undefined;
+    this.pushName = undefined;
+    this.currentQr = null;
+    this.currentQrDataUrl = null;
+    await this.init();
   }
 
   /**

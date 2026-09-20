@@ -59,6 +59,39 @@ router.post('/api/reconnect', async (_req: Request, res: Response) => {
   }
 });
 
+import multer from 'multer';
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+
+/**
+ * Action: Export/Download session as a zip archive.
+ */
+router.get('/api/session/export', (_req: Request, res: Response) => {
+  try {
+    const zipBuffer = whatsAppClient.exportSessionZip();
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="whatsapp-session-backup.zip"');
+    res.send(zipBuffer);
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * Action: Import/Upload session from a zip archive.
+ */
+router.post('/api/session/import', upload.single('session'), async (req: Request, res: Response) => {
+  try {
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ success: false, error: 'No zip file uploaded' });
+    }
+    await whatsAppClient.importSessionZip(req.file.buffer);
+    res.json({ success: true, message: 'Session restored successfully from backup' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 /**
  * Action: Reset session (unlink / clear credentials).
  */
@@ -163,14 +196,27 @@ router.get('/', async (_req: Request, res: Response) => {
           <p class="text-xs text-slate-400 mt-2" id="waiting-subtext">Initializing socket session</p>
         </div>
 
-        <!-- Actions -->
-        <div class="w-full pt-6 mt-auto border-t border-slate-700 flex gap-2">
-          <button onclick="reconnect()" class="flex-1 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-xs font-semibold rounded-lg transition">
-            Reconnect
-          </button>
-          <button onclick="resetSession()" class="flex-1 px-3 py-2 bg-rose-900/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/50 text-xs font-semibold rounded-lg transition">
-            Reset Session
-          </button>
+        <!-- Actions & Session Management -->
+        <div class="w-full pt-4 mt-auto border-t border-slate-700 space-y-2">
+          <div class="flex gap-2">
+            <button onclick="reconnect()" class="flex-1 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-xs font-semibold rounded-lg transition">
+              Reconnect
+            </button>
+            <button onclick="resetSession()" class="flex-1 px-3 py-2 bg-rose-900/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/50 text-xs font-semibold rounded-lg transition">
+              Reset Session
+            </button>
+          </div>
+          <div class="flex gap-2">
+            <button onclick="downloadSession()" class="flex-1 px-3 py-1.5 bg-blue-900/40 hover:bg-blue-900/60 text-blue-300 border border-blue-800/50 text-xs font-medium rounded-lg transition flex items-center justify-center gap-1">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+              Backup ZIP
+            </button>
+            <label class="flex-1 px-3 py-1.5 bg-emerald-900/40 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-800/50 text-xs font-medium rounded-lg transition flex items-center justify-center gap-1 cursor-pointer">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l4-4m0 0l4 4m-4-4v12"></path></svg>
+              Upload ZIP
+              <input type="file" accept=".zip" onchange="uploadSession(event)" class="hidden" />
+            </label>
+          </div>
         </div>
       </div>
 
@@ -332,6 +378,39 @@ router.get('/', async (_req: Request, res: Response) => {
     async function resetSession() {
       if (confirm('Are you sure you want to reset the WhatsApp session? You will need to re-scan a new QR code.')) {
         await fetch('/dashboard/api/reset', { method: 'POST' });
+      }
+    }
+
+    function downloadSession() {
+      window.location.href = '/dashboard/api/session/export';
+    }
+
+    async function uploadSession(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      if (!confirm('Uploading a session backup will replace the current WhatsApp session on this server. Continue?')) {
+        e.target.value = '';
+        return;
+      }
+      const formData = new FormData();
+      formData.append('session', file);
+
+      try {
+        const res = await fetch('/dashboard/api/session/import', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert('Session restored successfully! Reconnecting...');
+          window.location.reload();
+        } else {
+          alert('Upload failed: ' + (data.error || 'Unknown error'));
+        }
+      } catch (err) {
+        alert('Upload failed: ' + err.message);
+      } finally {
+        e.target.value = '';
       }
     }
 

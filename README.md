@@ -227,6 +227,34 @@ GET /api/v1/status
 
 ---
 
+## 💾 Session Backup, Restore & Reset
+
+The gateway allows you to export your active authenticated session and restore it on another VPS/container without re-scanning the QR code!
+
+### 1. From the Web Dashboard
+* **Backup Session (ZIP)**: Click **Backup ZIP** on the Dashboard to instantly download `whatsapp-session-backup.zip`.
+* **Upload / Restore Session**: Click **Upload ZIP**, choose your backup zip, and the server will restore your credentials and reconnect automatically.
+* **Reset Session**: Click **Reset Session** to wipe the local credentials and generate a fresh QR code.
+
+### 2. From the CLI
+```bash
+# Export active session to zip
+npm run session:export
+
+# Restore session from zip
+npm run session:import ./whatsapp-session-backup.zip
+```
+
+---
+
+## 🛡 24/7 High-Availability & Self-Healing
+
+* **Heartbeat Watchdog**: Inspects the WebSocket connection state every 30 seconds. If a silent connection drop or network freeze occurs, it triggers an immediate auto-reconnect.
+* **Auto-Reconnect with Backoff**: Catches network drops (`ECONNRESET`, `ETIMEDOUT`) with exponential backoff and handles `DisconnectReason.restartRequired` with an immediate 500ms restart.
+* **Process Crash Protection**: Global `uncaughtException` and `unhandledRejection` traps log structured errors via Pino and prevent unexpected process death.
+
+---
+
 ## 🪝 Incoming Messages & Webhook Signature Verification
 
 When a customer sends a message to the connected WhatsApp number, the gateway forwards an HTTP POST request to your `WEBHOOK_URL`.

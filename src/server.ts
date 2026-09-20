@@ -136,10 +136,10 @@ async function bootstrap() {
     server = app.listen(env.PORT, env.HOST, () => {
       logger.info(
         { port: env.PORT, host: env.HOST, env: env.NODE_ENV },
-        `🚀 WhatsApp Gateway running at http://${env.HOST}:${env.PORT}`
+        `WhatsApp Gateway running at http://${env.HOST}:${env.PORT}`
       );
-      logger.info(`📊 Dashboard: http://${env.HOST}:${env.PORT}/dashboard`);
-      logger.info(`📚 Swagger Docs: http://${env.HOST}:${env.PORT}/api-docs`);
+      logger.info(`Dashboard: http://${env.HOST}:${env.PORT}/dashboard`);
+      logger.info(`Swagger Docs: http://${env.HOST}:${env.PORT}/api-docs`);
     });
   } catch (err: any) {
     logger.fatal({ err: err.message }, 'Failed to bootstrap WhatsApp Gateway');
@@ -190,6 +190,14 @@ async function gracefulShutdown(signal: string) {
 
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+process.on('uncaughtException', (err) => {
+  logger.error({ err: err.message, stack: err.stack }, 'Uncaught Exception in process');
+});
+
+process.on('unhandledRejection', (reason: any) => {
+  logger.error({ reason: reason?.message || reason }, 'Unhandled Promise Rejection');
+});
 
 if (process.env.NODE_ENV !== 'test') {
   bootstrap();
