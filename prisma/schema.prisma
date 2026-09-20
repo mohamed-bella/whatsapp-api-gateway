@@ -1,0 +1,93 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageStatus {
+  PENDING
+  QUEUED
+  SENT
+  FAILED
+  DELIVERED
+}
+
+enum WebhookStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+model ApiToken {
+  id          String    @id @default(uuid())
+  name        String
+  tokenHash   String    @unique
+  tokenPrefix String    // First 8 chars for identification (e.g. wgw_live_...)
+  active      Boolean   @default(true)
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  messages    Message[]
+
+  @@index([tokenHash])
+  @@index([active])
+}
+
+model Message {
+  id              String           @id @default(uuid())
+  whatsappMessageId String?        @unique
+  direction       MessageDirection
+  to              String           // recipient phone / jid
+  from            String           // sender phone / jid
+  type            String           // text, image, document, etc.
+  body            String?          // text message body or caption
+  mediaUrl        String?          // url for image/document
+  filename        String?          // document filename
+  status          MessageStatus    @default(PENDING)
+  errorMessage    String?
+  apiTokenId      String?
+  apiToken        ApiToken?        @relation(fields: [apiTokenId], references: [id], onDelete: SetNull)
+  rawPayload      Json?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([whatsappMessageId])
+  @@index([to])
+  @@index([from])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model WebhookDelivery {
+  id              String        @id @default(uuid())
+  event           String        // e.g. message.received
+  payload         Json
+  endpoint        String
+  responseStatus  Int?
+  responseBody    String?
+  attempts        Int           @default(0)
+  status          WebhookStatus @default(PENDING)
+  errorMessage    String?
+  nextRetryAt     DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Settings {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
