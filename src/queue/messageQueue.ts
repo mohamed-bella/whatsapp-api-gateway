@@ -59,10 +59,10 @@ export class MessageQueue {
       throw err;
     }
 
-    // Persist message record as PENDING in database
-    let dbRecord;
+    // Persist message record in database if connected
+    let messageId = 'mem-' + Date.now();
     try {
-      dbRecord = await prisma.message.create({
+      const dbRecord = await prisma.message.create({
         data: {
           direction: 'OUTBOUND',
           to: jobData.to,
@@ -75,18 +75,15 @@ export class MessageQueue {
           apiTokenId: jobData.apiTokenId || null
         }
       });
+      messageId = dbRecord.id;
     } catch (err: any) {
-      logger.error({ err: err.message }, 'Failed to persist message to database');
-      // If DB fails, we still allow sending if desired, or fail gracefully
-      const dbErr: any = new Error('Database error while queuing message');
-      dbErr.code = 'INTERNAL_ERROR';
-      throw dbErr;
+      logger.warn({ err: err.message }, 'Could not persist message to DB. Proceeding with WhatsApp dispatch.');
     }
 
     return new Promise<SendMessageResult>((resolve, reject) => {
       const job: MessageJob = {
         ...jobData,
-        id: dbRecord.id,
+        id: messageId,
         resolve,
         reject,
         createdAt: Date.now()

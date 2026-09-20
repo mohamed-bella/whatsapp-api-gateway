@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
@@ -116,9 +117,16 @@ let server: any;
 
 async function bootstrap() {
   try {
-    // Check DB connection
-    await prisma.$connect();
-    logger.info('Database connected successfully');
+    // Attempt DB connection
+    try {
+      await prisma.$connect();
+      logger.info('Database connected successfully');
+    } catch (dbErr: any) {
+      logger.warn(
+        { err: dbErr.message },
+        'Database connection could not be established. Running in standalone mode (WhatsApp Gateway and QR Dashboard are active).'
+      );
+    }
 
     // Initialize Baileys WhatsApp client
     if (env.NODE_ENV !== 'test') {
